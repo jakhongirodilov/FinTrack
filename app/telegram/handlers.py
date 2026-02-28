@@ -127,9 +127,14 @@ async def expense_input(chat_id: int, text: str, db):
         return
 
     if state.get("step") == "awaiting_amount":
+        if text == "/cancel":
+            user_state.pop(chat_id, None)
+            await send_message(chat_id, "Cancelled. Choose a category:", reply_markup=kb)
+            return
+
         amount = parse_amount(text)
-        if amount is None:
-            await send_message(chat_id, "❌ Invalid amount. Enter a number (e.g. 500 or 25k):")
+        if amount is None or amount <= 0:
+            await send_message(chat_id, "❌ Invalid amount. Enter a positive number (e.g. 500 or 25k), or /cancel:")
             return
 
         repo.create_expense(db, user_id=chat_id, category_id=state["category_id"], amount=amount)
@@ -223,6 +228,16 @@ async def telegram_webhook(req: Request):
             await handle_add_category(chat_id, text, db)
         elif text.startswith("/remove_category"):
             await handle_remove_category(chat_id, text, db)
+        elif text.startswith("/"):
+            await send_message(chat_id, (
+                "Unknown command. Available commands:\n\n"
+                "/day — today's expenses\n"
+                "/week — this week's expenses\n"
+                "/month — this month's expenses\n"
+                "/add\\_category <name> — add a category\n"
+                "/remove\\_category <name> — remove a category\n"
+                "/cancel — cancel current input"
+            ))
         else:
             await expense_input(chat_id, text, db)
     finally:
