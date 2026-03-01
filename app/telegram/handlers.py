@@ -214,6 +214,13 @@ async def telegram_webhook(req: Request):
         user = repo.get_user(db, chat_id)
 
         if not user:
+            if text == "/start" and chat_id not in user_state:
+                await send_message(chat_id,
+                    "👋 Welcome to *FinTrack* — a minimalist expense tracker.\n\n"
+                    "Tap a category, enter an amount, done. "
+                    "Use /day, /week, /month to see your spending.\n\n"
+                    "Let's set up your account first."
+                )
             await signup(chat_id, text, db)
             return {"ok": True}
 
@@ -224,6 +231,11 @@ async def telegram_webhook(req: Request):
             await handle_summary(chat_id, "week", db)
         elif text == "/month":
             await handle_summary(chat_id, "month", db)
+        elif text == "/start":
+            kb = get_category_keyboard_for(db, chat_id)
+            await send_message(chat_id, f"Hey, {user.first_name}! Choose a category:", reply_markup=kb)
+        elif text == "/cancel":
+            await expense_input(chat_id, text, db)
         elif text.startswith("/add_category"):
             await handle_add_category(chat_id, text, db)
         elif text.startswith("/remove_category"):
