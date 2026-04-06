@@ -1,6 +1,8 @@
 import httpx
+import openpyxl
 from fastapi import APIRouter, Request
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from io import BytesIO
 from app.config import TELEGRAM_TOKEN
 from app.db.session import SessionLocal
 from app.db import repo
@@ -21,6 +23,12 @@ async def send_message(chat_id: int, text: str, reply_markup=None):
         payload["reply_markup"] = reply_markup
     async with httpx.AsyncClient() as client:
         await client.post(f"{TELEGRAM_API}/sendMessage", json=payload)
+
+
+async def answer_callback_query(callback_query_id: str):
+    async with httpx.AsyncClient() as client:
+        await client.post(f"{TELEGRAM_API}/answerCallbackQuery",
+                          json={"callback_query_id": callback_query_id})
 
 
 def parse_amount(text: str) -> int | None:
@@ -49,6 +57,12 @@ def format_summary(rows: list[tuple[str, int]], title: str) -> str:
 def get_category_keyboard_for(db, user_id: int):
     cats = repo.get_categories(db, user_id)
     return category_keyboard([c.name for c in cats])
+
+
+def inline_category_keyboard(categories):
+    """Inline keyboard for mapping category selection."""
+    buttons = [[{"text": c.name, "callback_data": f"map_category:{c.id}"}] for c in categories]
+    return {"inline_keyboard": buttons}
 
 
 # ── Signup flow ────────────────────────────────────────────────────────────
@@ -123,7 +137,7 @@ async def expense_input(chat_id: int, text: str, db):
             await send_message(chat_id, "❌ Unknown category. Please choose from the keyboard:", reply_markup=kb)
             return
         user_state[chat_id] = {"step": "awaiting_amount", "category_id": category.id, "category_name": category.name}
-        await send_message(chat_id, f"*{text}* selected. Enter amount:")
+        await send_message(chat_id, f"*{text}* selected. Enter amount (or /cancel):")
         return
 
     if state.get("step") == "awaiting_amount":
@@ -169,7 +183,6 @@ async def handle_summary(chat_id: int, period: str, db):
 # ── Category management commands ───────────────────────────────────────────
 
 async def handle_add_category(chat_id: int, text: str, db):
-    # text is the full message, e.g. "/add_category Dining"
     parts = text.split(maxsplit=1)
     if len(parts) < 2 or not parts[1].strip():
         await send_message(chat_id, "Usage: `/add_category <name>`")
@@ -197,20 +210,158 @@ async def handle_remove_category(chat_id: int, text: str, db):
         await send_message(chat_id, f"✅ Category *{name}* removed.", reply_markup=kb)
 
 
+# ── Service mapping commands ────────────────────────────────────────────────
+
+async def handle_add_mapping(chat_id: int, db):
+    user_state[chat_id] = {"step": "awaiting_mapping_keyword"}
+    await send_message(chat_id, "Enter the keyword(s) for the service (e.g. `baraka market`), or /cancel:")
+
+
+async def handle_list_mappings(chat_id: int, db):
+    mappings = repo.get_service_mappings(db, chat_id)
+    if not mappings:
+        await send_message(chat_id, "No mappings yet. Use /add\\_mapping to create one.")
+        return
+    lines = ["*Your mappings:*\n"]
+    for m in mappings:
+        lines.append(f"• `{m.keyword}` → {m.category.name}")
+    await send_message(chat_id, "\n".join(lines))
+
+
+async def handle_remove_mapping(chat_id: int, text: str, db):
+    parts = text.split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        await send_message(chat_id, "Usage: `/remove_mapping <keyword>`")
+        return
+    keyword = parts[1].strip()
+    deleted = repo.remove_service_mapping(db, chat_id, keyword)
+    if not deleted:
+        await send_message(chat_id, f"❌ Mapping `{keyword}` not found.")
+    else:
+        await send_message(chat_id, f"✅ Mapping `{keyword}` removed.")
+
+
+async def handle_mapping_keyword(chat_id: int, text: str, db):
+    """Called when user has typed a keyword during /add_mapping flow."""
+    keyword = text.strip().lower()
+    if not keyword:
+        await send_message(chat_id, "❌ Keyword can't be empty. Try again:")
+        return
+    user_state[chat_id] = {"step": "awaiting_mapping_category", "keyword": keyword}
+    cats = repo.get_categories(db, chat_id)
+    await send_message(chat_id, f"Keyword: `{keyword}`\n\nChoose a category:",
+                       reply_markup=inline_category_keyboard(cats))
+
+
+async def handle_callback_query(cq: dict, db):
+    """Handles inline keyboard button presses."""
+    callback_query_id = cq["id"]
+    chat_id = cq["from"]["id"]
+    data = cq.get("data", "")
+
+    await answer_callback_query(callback_query_id)
+
+    if data.startswith("map_category:"):
+        category_id = int(data.split(":")[1])
+        state = user_state.get(chat_id, {})
+        keyword = state.get("keyword")
+        if not keyword:
+            await send_message(chat_id, "❌ Session expired. Please start /add\\_mapping again.")
+            return
+
+        result = repo.add_service_mapping(db, chat_id, keyword, category_id)
+        user_state.pop(chat_id, None)
+        if result is None:
+            await send_message(chat_id, f"❌ Mapping for `{keyword}` already exists.")
+        else:
+            await send_message(chat_id, f"✅ `{keyword}` → *{result.category.name}*")
+
+
+# ── Click xlsx import ───────────────────────────────────────────────────────
+
+async def handle_xlsx_import(chat_id: int, file_id: str, db):
+    async with httpx.AsyncClient() as client:
+        r = await client.get(f"{TELEGRAM_API}/getFile", params={"file_id": file_id})
+        file_path = r.json()["result"]["file_path"]
+        file_r = await client.get(f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}")
+        content = file_r.content
+
+    wb = openpyxl.load_workbook(BytesIO(content))
+    ws = wb.active
+
+    # Map header names to column indices
+    headers = {str(cell.value).strip(): idx for idx, cell in enumerate(ws[1])}
+    required = {"Сумма", "Время", "Карта", "Сервис", "Статус платежа"}
+    if not required.issubset(headers):
+        await send_message(chat_id, "❌ Unrecognized file format. Expected Click export.")
+        return
+
+    imported = duplicates = unmatched = 0
+
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        status = str(row[headers["Статус платежа"]]).strip()
+        if status != "Успешно проведен":
+            continue
+
+        time_val = row[headers["Время"]]
+        card = str(row[headers["Карта"]]).strip()
+
+        # Normalize time to string for import_ref
+        if isinstance(time_val, datetime):
+            time_str = time_val.strftime("%d.%m.%Y %H:%M:%S")
+            expense_date = time_val.date()
+        else:
+            time_str = str(time_val).strip()
+            try:
+                expense_date = datetime.strptime(time_str, "%d.%m.%Y %H:%M:%S").date()
+            except ValueError:
+                unmatched += 1
+                continue
+
+        import_ref = f"{time_str}|{card}"
+        if repo.import_ref_exists(db, chat_id, import_ref):
+            duplicates += 1
+            continue
+
+        service = str(row[headers["Сервис"]]).strip()
+        category = repo.get_category_for_service(db, chat_id, service)
+        if not category:
+            unmatched += 1
+            continue
+
+        amount = round(float(row[headers["Сумма"]]))
+        if amount <= 0:
+            continue
+
+        repo.create_imported_expense(db, chat_id, category.id, amount, expense_date, import_ref)
+        imported += 1
+
+    await send_message(
+        chat_id,
+        f"✅ Imported: *{imported}* | ⏭ Duplicates: *{duplicates}* | ❓ Unmatched: *{unmatched}*"
+    )
+
+
 # ── Webhook entry point ────────────────────────────────────────────────────
 
 @router.post("/webhook")
 async def telegram_webhook(req: Request):
     data = await req.json()
-    if "message" not in data:
-        return {"ok": True}
-
-    msg = data["message"]
-    chat_id = msg["chat"]["id"]
-    text = msg.get("text", "").strip()
 
     db = SessionLocal()
     try:
+        # Handle inline keyboard button presses
+        if "callback_query" in data:
+            await handle_callback_query(data["callback_query"], db)
+            return {"ok": True}
+
+        if "message" not in data:
+            return {"ok": True}
+
+        msg = data["message"]
+        chat_id = msg["chat"]["id"]
+        text = msg.get("text", "").strip()
+
         user = repo.get_user(db, chat_id)
 
         if not user:
@@ -224,6 +375,25 @@ async def telegram_webhook(req: Request):
             await signup(chat_id, text, db)
             return {"ok": True}
 
+        # Handle document upload (xlsx import)
+        doc = msg.get("document")
+        if doc:
+            state = user_state.get(chat_id, {})
+            if state.get("step") == "awaiting_import_file":
+                user_state.pop(chat_id, None)
+                xlsx_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                if doc.get("mime_type") == xlsx_mime:
+                    await handle_xlsx_import(chat_id, doc["file_id"], db)
+                else:
+                    await send_message(chat_id, "❌ Please send an .xlsx file.")
+            return {"ok": True}
+
+        # Handle awaiting_mapping_keyword state before command routing
+        state = user_state.get(chat_id, {})
+        if state.get("step") == "awaiting_mapping_keyword" and not text.startswith("/"):
+            await handle_mapping_keyword(chat_id, text, db)
+            return {"ok": True}
+
         # Commands
         if text == "/day":
             await handle_summary(chat_id, "day", db)
@@ -235,7 +405,18 @@ async def telegram_webhook(req: Request):
             kb = get_category_keyboard_for(db, chat_id)
             await send_message(chat_id, f"Hey, {user.first_name}! Choose a category:", reply_markup=kb)
         elif text == "/cancel":
-            await expense_input(chat_id, text, db)
+            user_state.pop(chat_id, None)
+            kb = get_category_keyboard_for(db, chat_id)
+            await send_message(chat_id, "Cancelled. Choose a category:", reply_markup=kb)
+        elif text == "/import":
+            user_state[chat_id] = {"step": "awaiting_import_file"}
+            await send_message(chat_id, "Send your Click `.xlsx` file (or /cancel):")
+        elif text == "/add_mapping":
+            await handle_add_mapping(chat_id, db)
+        elif text == "/list_mappings":
+            await handle_list_mappings(chat_id, db)
+        elif text.startswith("/remove_mapping"):
+            await handle_remove_mapping(chat_id, text, db)
         elif text.startswith("/add_category"):
             await handle_add_category(chat_id, text, db)
         elif text.startswith("/remove_category"):
@@ -246,6 +427,10 @@ async def telegram_webhook(req: Request):
                 "/day — today's expenses\n"
                 "/week — this week's expenses\n"
                 "/month — this month's expenses\n"
+                "/import — import Click .xlsx file\n"
+                "/add\\_mapping — map a service keyword to a category\n"
+                "/list\\_mappings — show all keyword mappings\n"
+                "/remove\\_mapping <keyword> — remove a mapping\n"
                 "/add\\_category <name> — add a category\n"
                 "/remove\\_category <name> — remove a category\n"
                 "/cancel — cancel current input"

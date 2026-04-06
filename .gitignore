@@ -3,3 +3,6 @@ venv/
 __pycache__/
 *.pyc
 *.db
+click-payments.xlsx
+frontend/dist/
+frontend/node_modules/

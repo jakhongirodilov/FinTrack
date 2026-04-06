@@ -33,7 +33,19 @@ class Expense(Base):
     amount = Column(Integer, nullable=False)
     expense_date = Column(Date, nullable=False)
     note = Column(Text, nullable=True)
+    import_ref = Column(String, nullable=True)  # "{time}|{card}" for Click imports; NULL for manual
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User")
+    category = relationship("Category")
+
+
+class ServiceMapping(Base):
+    __tablename__ = "service_mappings"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    keyword = Column(String, nullable=False)     # stored lowercase+stripped
+    category_id = Column(Integer, ForeignKey("categories.id", ondelete="CASCADE"), nullable=False)
+
     category = relationship("Category")
