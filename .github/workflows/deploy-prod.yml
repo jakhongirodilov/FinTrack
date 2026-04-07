@@ -49,7 +49,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             docker pull ghcr.io/jakhongirodilov/fintrack:${{ needs.build.outputs.tag }}
-            sed -i "s|ghcr.io/jakhongirodilov/fintrack:sha-[a-f0-9]*|ghcr.io/jakhongirodilov/fintrack:${{ needs.build.outputs.tag }}|" \
+            sed -i "s|ghcr.io/jakhongirodilov/fintrack:[^ ]*|ghcr.io/jakhongirodilov/fintrack:${{ needs.build.outputs.tag }}|" \
               /etc/systemd/system/fintrack.service
             systemctl daemon-reload
             systemctl restart fintrack
