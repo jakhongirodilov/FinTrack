@@ -80,6 +80,26 @@ export default function Dashboard() {
           )}
         </div>
 
+        {/* Category bar chart */}
+        <div style={{ ...card, gridColumn: '1 / -1' }}>
+          <h3 style={cardTitle}>By Category</h3>
+          {summary.length === 0 ? (
+            <p style={{ color: '#888' }}>No expenses yet.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={summary} layout="vertical" margin={{ left: 16, right: 32 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" tickFormatter={fmt} tick={{ fontSize: 12 }} />
+                <YAxis type="category" dataKey="category_name" tick={{ fontSize: 12 }} width={100} />
+                <Tooltip formatter={(v) => fmt(Number(v))} />
+                <Bar dataKey="total" radius={[0, 4, 4, 0]}>
+                  {summary.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
         {/* Category breakdown table */}
         <div style={{ ...card, gridColumn: '1 / -1' }}>
           <h3 style={cardTitle}>Breakdown</h3>
