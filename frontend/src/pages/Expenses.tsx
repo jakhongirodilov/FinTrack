@@ -5,6 +5,11 @@ import type { Expense, Category } from '../types'
 
 const PAGE_SIZE = 50
 
+function fmtDate(s: string) {
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en', { month: 'short', day: 'numeric' })
+}
+
 interface EditState {
   id: number
   amount: string
@@ -33,6 +38,7 @@ export default function Expenses() {
   // Edit state
   const [editing, setEditing] = useState<EditState | null>(null)
   const [saving, setSaving] = useState(false)
+  const [hoveredRow, setHoveredRow] = useState<number | null>(null)
 
   function load(p = page) {
     setLoading(true)
@@ -209,8 +215,12 @@ export default function Expenses() {
             </thead>
             <tbody>
               {expenses.map(e => (
-                <tr key={e.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                  <td style={td}>{e.expense_date}</td>
+                <tr key={e.id}
+                  style={{ borderBottom: '1px solid #f0f0f0', background: hoveredRow === e.id ? '#f8f8ff' : 'transparent', transition: 'background 0.1s' }}
+                  onMouseEnter={() => setHoveredRow(e.id)}
+                  onMouseLeave={() => setHoveredRow(null)}
+                >
+                  <td style={td}>{fmtDate(e.expense_date)}</td>
                   <td style={td}>{e.category_name ?? <span style={{ color: '#aaa' }}>Uncategorized</span>}</td>
                   <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{e.amount.toLocaleString()}</td>
                   <td style={{ ...td, color: '#888', fontSize: '0.85rem' }}>
