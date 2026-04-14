@@ -11,9 +11,7 @@ export default function Mappings() {
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState('')
 
-  function load() {
-    getMappings().then(setMappings)
-  }
+  function load() { getMappings().then(setMappings) }
 
   useEffect(() => {
     load()
@@ -33,9 +31,7 @@ export default function Mappings() {
       load()
     } catch (err: any) {
       setError(err?.response?.data?.detail || 'Error')
-    } finally {
-      setAdding(false)
-    }
+    } finally { setAdding(false) }
   }
 
   async function handleDelete(id: number, kw: string) {
@@ -46,54 +42,72 @@ export default function Mappings() {
 
   return (
     <div>
-      <h2 style={{ marginBottom: '1.5rem' }}>Service Mappings</h2>
-      <p style={{ color: '#666', marginBottom: '1rem', fontSize: '0.9rem' }}>
-        Keywords are matched against service names in Click imports (case-insensitive substring match).
-      </p>
-      <div style={card}>
-        <form onSubmit={handleAdd} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-          <div style={fieldCol}>
-            <label style={label}>Keyword</label>
-            <input style={input} type="text" placeholder="e.g. baraka market" value={keyword} onChange={e => setKeyword(e.target.value)} />
+      <div className="page-header">
+        <div>
+          <h2 className="page-title">Service Mappings</h2>
+          <p style={{ margin: '0.25rem 0 0', fontSize: '0.825rem', color: 'var(--muted)' }}>
+            Keywords matched against Click import service names (case-insensitive)
+          </p>
+        </div>
+        <span style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>{mappings.length} mappings</span>
+      </div>
+
+      <div className="card">
+        {/* Add form */}
+        <form onSubmit={handleAdd} style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '1.25rem' }}>
+          <div className="field" style={{ minWidth: 200, flex: 1 }}>
+            <label className="field-label">Keyword</label>
+            <input className="input" type="text" placeholder="e.g. baraka market" value={keyword} onChange={e => setKeyword(e.target.value)} />
           </div>
-          <div style={fieldCol}>
-            <label style={label}>Category</label>
-            <select style={input} value={catId} onChange={e => setCatId(e.target.value)}>
+          <div className="field" style={{ minWidth: 180 }}>
+            <label className="field-label">Maps to category</label>
+            <select className="input" value={catId} onChange={e => setCatId(e.target.value)}>
               {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
-          <button type="submit" disabled={adding} style={btnPrimary}>Add</button>
+          <button type="submit" className="btn btn-primary" disabled={adding || !keyword.trim()} style={{ alignSelf: 'flex-end' }}>
+            {adding ? 'Adding…' : 'Add mapping'}
+          </button>
         </form>
-        {error && <p style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem' }}>{error}</p>}
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-          <thead>
-            <tr style={{ borderBottom: '2px solid #e5e5e5' }}>
-              <th style={th}>Keyword</th>
-              <th style={th}>Category</th>
-              <th style={th}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {mappings.map(m => (
-              <tr key={m.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                <td style={td}><code style={{ background: '#f3f4f6', padding: '0.1rem 0.4rem', borderRadius: 4 }}>{m.keyword}</code></td>
-                <td style={td}>{m.category_name}</td>
-                <td style={td}><button style={btnDanger} onClick={() => handleDelete(m.id, m.keyword)}>Remove</button></td>
+
+        {error && (
+          <div style={{ color: 'var(--danger)', fontSize: '0.825rem', marginBottom: '1rem', padding: '0.5rem 0.75rem', background: 'var(--danger-bg)', borderRadius: 'var(--radius-sm)' }}>
+            {error}
+          </div>
+        )}
+
+        {/* Table */}
+        {mappings.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '2rem 0', color: 'var(--muted)', fontSize: '0.9rem', borderTop: '1px solid var(--border)' }}>
+            No mappings yet. Add one above.
+          </div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+            <thead>
+              <tr>
+                <th className="table-th">Keyword</th>
+                <th className="table-th">Category</th>
+                <th className="table-th" style={{ width: 80 }}></th>
               </tr>
-            ))}
-            {mappings.length === 0 && <tr><td colSpan={3} style={{ ...td, color: '#aaa', textAlign: 'center' }}>No mappings yet</td></tr>}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {mappings.map(m => (
+                <tr key={m.id} className="table-row">
+                  <td className="table-td">
+                    <code style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', padding: '0.15rem 0.5rem', borderRadius: 4, fontSize: '0.82rem', color: 'var(--primary)', fontFamily: 'monospace' }}>
+                      {m.keyword}
+                    </code>
+                  </td>
+                  <td className="table-td" style={{ color: 'var(--text-2)' }}>{m.category_name}</td>
+                  <td className="table-td">
+                    <button className="btn btn-danger" onClick={() => handleDelete(m.id, m.keyword)}>Remove</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   )
 }
-
-const card: React.CSSProperties = { background: '#fff', borderRadius: 10, padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }
-const fieldCol: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: '0.25rem' }
-const label: React.CSSProperties = { fontSize: '0.8rem', color: '#555', fontWeight: 500 }
-const input: React.CSSProperties = { padding: '0.4rem 0.6rem', border: '1px solid #d1d5db', borderRadius: 6, fontSize: '0.9rem', minWidth: 180 }
-const th: React.CSSProperties = { padding: '0.5rem 0.75rem', textAlign: 'left', fontWeight: 600, color: '#555' }
-const td: React.CSSProperties = { padding: '0.5rem 0.75rem' }
-const btnPrimary: React.CSSProperties = { background: '#6366f1', color: '#fff', border: 'none', borderRadius: 6, padding: '0.45rem 1rem', cursor: 'pointer', fontSize: '0.9rem' }
-const btnDanger: React.CSSProperties = { background: 'none', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: 4, cursor: 'pointer', fontSize: '0.8rem', padding: '0.2rem 0.5rem' }

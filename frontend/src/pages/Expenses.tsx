@@ -7,7 +7,7 @@ const PAGE_SIZE = 50
 
 function fmtDate(s: string) {
   const [y, m, d] = s.split('-').map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString('en', { month: 'short', day: 'numeric' })
+  return new Date(y, m - 1, d).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 interface EditState {
@@ -28,28 +28,24 @@ export default function Expenses() {
   const [filterEnd, setFilterEnd] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // Add form
   const [amount, setAmount] = useState('')
   const [catId, setCatId] = useState('')
   const [expDate, setExpDate] = useState(new Date().toISOString().slice(0, 10))
   const [note, setNote] = useState('')
   const [adding, setAdding] = useState(false)
 
-  // Edit state
   const [editing, setEditing] = useState<EditState | null>(null)
   const [saving, setSaving] = useState(false)
-  const [hoveredRow, setHoveredRow] = useState<number | null>(null)
 
   function load(p = page) {
     setLoading(true)
-    const params: any = { page: p, page_size: PAGE_SIZE }
+    const params: Record<string, unknown> = { page: p, page_size: PAGE_SIZE }
     if (filterCat) params.category_id = Number(filterCat)
     if (filterStart) params.start_date = filterStart
     if (filterEnd) params.end_date = filterEnd
-    getExpenses(params).then(({ items, total }) => {
-      setExpenses(items)
-      setTotal(total)
-    }).finally(() => setLoading(false))
+    getExpenses(params as Parameters<typeof getExpenses>[0])
+      .then(({ items, total }) => { setExpenses(items); setTotal(total) })
+      .finally(() => setLoading(false))
   }
 
   useEffect(() => { getCategories().then(setCategories) }, [])
@@ -64,19 +60,11 @@ export default function Expenses() {
       await createExpense({ amount: Number(amount), category_id: Number(catId), expense_date: expDate, note: note || undefined })
       setAmount(''); setNote('')
       load(1); setPage(1)
-    } finally {
-      setAdding(false)
-    }
+    } finally { setAdding(false) }
   }
 
   function startEdit(e: Expense) {
-    setEditing({
-      id: e.id,
-      amount: String(e.amount),
-      category_id: e.category_id ? String(e.category_id) : '',
-      expense_date: e.expense_date,
-      note: e.note ?? '',
-    })
+    setEditing({ id: e.id, amount: String(e.amount), category_id: e.category_id ? String(e.category_id) : '', expense_date: e.expense_date, note: e.note ?? '' })
   }
 
   async function handleSaveEdit(e: React.FormEvent) {
@@ -94,9 +82,7 @@ export default function Expenses() {
       load(page)
     } catch (err: any) {
       alert(err?.response?.data?.detail || 'Error saving')
-    } finally {
-      setSaving(false)
-    }
+    } finally { setSaving(false) }
   }
 
   async function handleDelete(id: number) {
@@ -109,83 +95,95 @@ export default function Expenses() {
 
   return (
     <div>
-      <h2 style={{ marginBottom: '1.5rem' }}>Expenses</h2>
+      <div className="page-header">
+        <h2 className="page-title">Expenses</h2>
+        <span style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>{total} total</span>
+      </div>
 
       {/* Add form */}
-      <div style={card}>
-        <h3 style={cardTitle}>Add Expense</h3>
+      <div className="card" style={{ marginBottom: '1rem' }}>
+        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-2)', marginBottom: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Add Expense</div>
         <form onSubmit={handleAdd} style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <div style={field}>
-            <label style={label}>Amount</label>
-            <input style={input} type="number" placeholder="5000" value={amount} onChange={e => setAmount(e.target.value)} required />
+          <div className="field" style={{ minWidth: 120 }}>
+            <label className="field-label">Amount</label>
+            <input className="input" type="number" placeholder="5000" value={amount} onChange={e => setAmount(e.target.value)} required />
           </div>
-          <div style={field}>
-            <label style={label}>Category</label>
-            <select style={input} value={catId} onChange={e => setCatId(e.target.value)} required>
+          <div className="field" style={{ minWidth: 150 }}>
+            <label className="field-label">Category</label>
+            <select className="input" value={catId} onChange={e => setCatId(e.target.value)} required>
               <option value="">Select…</option>
               {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
-          <div style={field}>
-            <label style={label}>Date</label>
-            <input style={input} type="date" value={expDate} onChange={e => setExpDate(e.target.value)} required />
+          <div className="field" style={{ minWidth: 140 }}>
+            <label className="field-label">Date</label>
+            <input className="input" type="date" value={expDate} onChange={e => setExpDate(e.target.value)} required />
           </div>
-          <div style={field}>
-            <label style={label}>Note</label>
-            <input style={input} type="text" placeholder="Optional" value={note} onChange={e => setNote(e.target.value)} />
+          <div className="field" style={{ minWidth: 160, flex: 1 }}>
+            <label className="field-label">Note</label>
+            <input className="input" type="text" placeholder="Optional" value={note} onChange={e => setNote(e.target.value)} />
           </div>
-          <button type="submit" disabled={adding} style={btnPrimary}>Add</button>
+          <button type="submit" className="btn btn-primary" disabled={adding} style={{ alignSelf: 'flex-end' }}>
+            {adding ? 'Adding…' : '+ Add'}
+          </button>
         </form>
       </div>
 
       {/* Filters */}
-      <div style={{ ...card, marginTop: '1rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <div style={field}>
-          <label style={label}>Category</label>
-          <select style={input} value={filterCat} onChange={e => setFilterCat(e.target.value)}>
-            <option value="">All</option>
+      <div className="card" style={{ marginBottom: '1rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div className="field" style={{ minWidth: 150 }}>
+          <label className="field-label">Category</label>
+          <select className="input" value={filterCat} onChange={e => setFilterCat(e.target.value)}>
+            <option value="">All categories</option>
             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
-        <div style={field}>
-          <label style={label}>From</label>
-          <input style={input} type="date" value={filterStart} onChange={e => setFilterStart(e.target.value)} />
+        <div className="field" style={{ minWidth: 140 }}>
+          <label className="field-label">From</label>
+          <input className="input" type="date" value={filterStart} onChange={e => setFilterStart(e.target.value)} />
         </div>
-        <div style={field}>
-          <label style={label}>To</label>
-          <input style={input} type="date" value={filterEnd} onChange={e => setFilterEnd(e.target.value)} />
+        <div className="field" style={{ minWidth: 140 }}>
+          <label className="field-label">To</label>
+          <input className="input" type="date" value={filterEnd} onChange={e => setFilterEnd(e.target.value)} />
         </div>
-        <button style={btnSecondary} onClick={() => { setFilterCat(''); setFilterStart(''); setFilterEnd('') }}>Clear</button>
+        {(filterCat || filterStart || filterEnd) && (
+          <button className="btn btn-secondary" style={{ alignSelf: 'flex-end' }} onClick={() => { setFilterCat(''); setFilterStart(''); setFilterEnd('') }}>
+            Clear filters
+          </button>
+        )}
       </div>
 
       {/* Edit modal */}
       {editing && (
-        <div style={overlay}>
+        <div style={overlay} onClick={e => e.target === e.currentTarget && setEditing(null)}>
           <div style={modal}>
-            <h3 style={{ marginBottom: '1rem' }}>Edit Expense</h3>
-            <form onSubmit={handleSaveEdit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <div style={field}>
-                <label style={label}>Amount</label>
-                <input style={input} type="number" value={editing.amount} onChange={e => setEditing({ ...editing, amount: e.target.value })} required />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--text)' }}>Edit Expense</h3>
+              <button className="btn-icon" onClick={() => setEditing(null)} aria-label="Close">×</button>
+            </div>
+            <form onSubmit={handleSaveEdit} style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+              <div className="field">
+                <label className="field-label">Amount</label>
+                <input className="input" type="number" value={editing.amount} onChange={e => setEditing({ ...editing, amount: e.target.value })} required />
               </div>
-              <div style={field}>
-                <label style={label}>Category</label>
-                <select style={input} value={editing.category_id} onChange={e => setEditing({ ...editing, category_id: e.target.value })}>
+              <div className="field">
+                <label className="field-label">Category</label>
+                <select className="input" value={editing.category_id} onChange={e => setEditing({ ...editing, category_id: e.target.value })}>
                   <option value="">Uncategorized</option>
                   {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
-              <div style={field}>
-                <label style={label}>Date</label>
-                <input style={input} type="date" value={editing.expense_date} onChange={e => setEditing({ ...editing, expense_date: e.target.value })} required />
+              <div className="field">
+                <label className="field-label">Date</label>
+                <input className="input" type="date" value={editing.expense_date} onChange={e => setEditing({ ...editing, expense_date: e.target.value })} required />
               </div>
-              <div style={field}>
-                <label style={label}>Note</label>
-                <input style={input} type="text" value={editing.note} onChange={e => setEditing({ ...editing, note: e.target.value })} />
+              <div className="field">
+                <label className="field-label">Note</label>
+                <input className="input" type="text" value={editing.note} onChange={e => setEditing({ ...editing, note: e.target.value })} />
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-                <button type="button" style={btnSecondary} onClick={() => setEditing(null)}>Cancel</button>
-                <button type="submit" style={btnPrimary} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', paddingTop: '0.25rem' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setEditing(null)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
               </div>
             </form>
           </div>
@@ -193,47 +191,60 @@ export default function Expenses() {
       )}
 
       {/* Table */}
-      <div style={{ ...card, marginTop: '1rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-          <span style={{ fontSize: '0.9rem', color: '#666' }}>{total} expenses</span>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button style={btnSecondary} disabled={page <= 1} onClick={() => setPage(p => p - 1)}>← Prev</button>
-            <span style={{ fontSize: '0.9rem', padding: '0.3rem 0.5rem' }}>{page} / {totalPages || 1}</span>
-            <button style={btnSecondary} disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Next →</button>
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.875rem 1.25rem', borderBottom: '1px solid var(--border)' }}>
+          <span style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
+            {total === 0 ? 'No expenses' : `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, total)} of ${total}`}
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <button className="btn btn-secondary" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }} disabled={page <= 1} onClick={() => setPage(p => p - 1)}>← Prev</button>
+            <span style={{ fontSize: '0.82rem', color: 'var(--muted)', minWidth: 60, textAlign: 'center' }}>{page} / {totalPages || 1}</span>
+            <button className="btn btn-secondary" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }} disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Next →</button>
           </div>
         </div>
-        {loading ? <p>Loading…</p> : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+
+        {loading ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted)', fontSize: '0.9rem' }}>Loading…</div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
             <thead>
-              <tr style={{ borderBottom: '2px solid #e5e5e5' }}>
-                <th style={th}>Date</th>
-                <th style={th}>Category</th>
-                <th style={{ ...th, textAlign: 'right' }}>Amount</th>
-                <th style={th}>Note</th>
-                <th style={th}></th>
+              <tr>
+                <th className="table-th">Date</th>
+                <th className="table-th">Category</th>
+                <th className="table-th" style={{ textAlign: 'right' }}>Amount</th>
+                <th className="table-th">Note</th>
+                <th className="table-th" style={{ width: 80 }}></th>
               </tr>
             </thead>
             <tbody>
               {expenses.map(e => (
-                <tr key={e.id}
-                  style={{ borderBottom: '1px solid #f0f0f0', background: hoveredRow === e.id ? '#f8f8ff' : 'transparent', transition: 'background 0.1s' }}
-                  onMouseEnter={() => setHoveredRow(e.id)}
-                  onMouseLeave={() => setHoveredRow(null)}
-                >
-                  <td style={td}>{fmtDate(e.expense_date)}</td>
-                  <td style={td}>{e.category_name ?? <span style={{ color: '#aaa' }}>Uncategorized</span>}</td>
-                  <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{e.amount.toLocaleString()}</td>
-                  <td style={{ ...td, color: '#888', fontSize: '0.85rem' }}>
-                    {e.note}
-                    {e.import_ref && <span title="Imported from Click" style={{ marginLeft: 4, color: '#aaa' }}>↩</span>}
+                <tr key={e.id} className="table-row">
+                  <td className="table-td" style={{ color: 'var(--text-2)', whiteSpace: 'nowrap' }}>{fmtDate(e.expense_date)}</td>
+                  <td className="table-td">
+                    {e.category_name ?? <span style={{ color: 'var(--muted)', fontStyle: 'italic' }}>Uncategorized</span>}
                   </td>
-                  <td style={{ ...td, display: 'flex', gap: '0.4rem' }}>
-                    <button style={btnEdit} onClick={() => startEdit(e)}>Edit</button>
-                    <button style={btnDanger} onClick={() => handleDelete(e.id)}>✕</button>
+                  <td className="table-td" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    {e.amount.toLocaleString()}
+                  </td>
+                  <td className="table-td" style={{ color: 'var(--text-2)', fontSize: '0.825rem', maxWidth: 200 }}>
+                    {e.note}
+                    {e.import_ref && <span title="Imported" style={{ marginLeft: 4, color: 'var(--muted)', fontSize: '0.75rem' }}>↩</span>}
+                  </td>
+                  <td className="table-td" style={{ whiteSpace: 'nowrap' }}>
+                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                      <button className="btn btn-ghost" onClick={() => startEdit(e)}>Edit</button>
+                      <button className="btn-icon" onClick={() => handleDelete(e.id)} title="Delete" style={{ color: 'var(--muted)', fontSize: '1rem' }}>×</button>
+                    </div>
                   </td>
                 </tr>
               ))}
-              {expenses.length === 0 && <tr><td colSpan={5} style={{ ...td, color: '#aaa', textAlign: 'center' }}>No expenses</td></tr>}
+              {expenses.length === 0 && (
+                <tr>
+                  <td colSpan={5} style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--muted)' }}>
+                    No expenses found
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         )}
@@ -242,16 +253,12 @@ export default function Expenses() {
   )
 }
 
-const card: React.CSSProperties = { background: '#fff', borderRadius: 10, padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }
-const cardTitle: React.CSSProperties = { marginBottom: '1rem', fontSize: '1rem', fontWeight: 600 }
-const field: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: '0.25rem' }
-const label: React.CSSProperties = { fontSize: '0.8rem', color: '#555', fontWeight: 500 }
-const input: React.CSSProperties = { padding: '0.4rem 0.6rem', border: '1px solid #d1d5db', borderRadius: 6, fontSize: '0.9rem', minWidth: 120 }
-const th: React.CSSProperties = { padding: '0.5rem 0.75rem', textAlign: 'left', fontWeight: 600, color: '#555' }
-const td: React.CSSProperties = { padding: '0.5rem 0.75rem' }
-const btnPrimary: React.CSSProperties = { background: '#6366f1', color: '#fff', border: 'none', borderRadius: 6, padding: '0.45rem 1rem', cursor: 'pointer', fontSize: '0.9rem' }
-const btnSecondary: React.CSSProperties = { background: '#fff', color: '#555', border: '1px solid #d1d5db', borderRadius: 6, padding: '0.4rem 0.75rem', cursor: 'pointer', fontSize: '0.85rem' }
-const btnEdit: React.CSSProperties = { background: 'none', color: '#6366f1', border: '1px solid #c7d2fe', borderRadius: 4, cursor: 'pointer', fontSize: '0.8rem', padding: '0.2rem 0.5rem' }
-const btnDanger: React.CSSProperties = { background: 'none', color: '#ef4444', border: 'none', cursor: 'pointer', fontSize: '1rem', padding: '0.1rem 0.3rem' }
-const overlay: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }
-const modal: React.CSSProperties = { background: '#fff', borderRadius: 10, padding: '1.5rem', width: 360, boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }
+const overlay: React.CSSProperties = {
+  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
+  backdropFilter: 'blur(2px)',
+}
+const modal: React.CSSProperties = {
+  background: 'var(--surface)', borderRadius: 'var(--radius-lg)', padding: '1.5rem',
+  width: 380, boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)',
+}

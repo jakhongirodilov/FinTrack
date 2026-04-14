@@ -3,14 +3,14 @@ import { getMe, updateBudget } from '../api/users'
 import { useAuth } from '../hooks/useAuth'
 
 export default function Settings() {
-  const { updateUser } = useAuth()
+  const { user, updateUser } = useAuth()
   const [budget, setBudget] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    getMe().then(user => {
-      if (user.budget != null) setBudget(String(user.budget))
+    getMe().then(u => {
+      if (u.budget != null) setBudget(String(u.budget))
     })
   }, [])
 
@@ -22,32 +22,80 @@ export default function Settings() {
       const updated = await updateBudget(val)
       updateUser(updated)
       setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-    } finally {
-      setSaving(false)
-    }
+      setTimeout(() => setSaved(false), 2500)
+    } finally { setSaving(false) }
   }
 
   return (
     <div>
-      <h2 style={{ marginBottom: '1.5rem' }}>Settings</h2>
-      <div style={card}>
-        <h3 style={{ marginBottom: '1rem', fontSize: '1rem', fontWeight: 600 }}>Monthly Budget</h3>
-        <form onSubmit={handleSave} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            <label style={label}>Budget amount (leave empty to unset)</label>
-            <input style={input} type="number" placeholder="e.g. 3000000" value={budget} onChange={e => setBudget(e.target.value)} min={0} />
+      <div className="page-header">
+        <h2 className="page-title">Settings</h2>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: 480 }}>
+        {/* Account info */}
+        <div className="card">
+          <div style={sectionLabel}>Account</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+            <InfoRow label="Username" value={`@${user?.username ?? '—'}`} />
+            {user?.first_name && <InfoRow label="Name" value={[user.first_name, user.last_name].filter(Boolean).join(' ')} />}
           </div>
-          <button type="submit" disabled={saving} style={btnPrimary}>
-            {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save'}
-          </button>
-        </form>
+        </div>
+
+        {/* Budget */}
+        <div className="card">
+          <div style={sectionLabel}>Monthly Budget</div>
+          <p style={{ fontSize: '0.825rem', color: 'var(--muted)', marginBottom: '1rem' }}>
+            Set a monthly spending limit to track budget usage on the dashboard.
+            Leave empty to disable.
+          </p>
+          <form onSubmit={handleSave}>
+            <div className="field" style={{ marginBottom: '0.875rem' }}>
+              <label className="field-label">Budget amount</label>
+              <input
+                className="input"
+                type="number"
+                placeholder="e.g. 3 000 000"
+                value={budget}
+                onChange={e => setBudget(e.target.value)}
+                min={0}
+                style={{ maxWidth: 240 }}
+              />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <button type="submit" className="btn btn-primary" disabled={saving}>
+                {saving ? 'Saving…' : 'Save budget'}
+              </button>
+              {saved && (
+                <span style={{ fontSize: '0.825rem', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  Saved
+                </span>
+              )}
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   )
 }
 
-const card: React.CSSProperties = { background: '#fff', borderRadius: 10, padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', maxWidth: 480 }
-const label: React.CSSProperties = { fontSize: '0.8rem', color: '#555', fontWeight: 500 }
-const input: React.CSSProperties = { padding: '0.4rem 0.6rem', border: '1px solid #d1d5db', borderRadius: 6, fontSize: '0.9rem', minWidth: 220 }
-const btnPrimary: React.CSSProperties = { background: '#6366f1', color: '#fff', border: 'none', borderRadius: 6, padding: '0.45rem 1rem', cursor: 'pointer', fontSize: '0.9rem' }
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid var(--border)' }}>
+      <span style={{ fontSize: '0.85rem', color: 'var(--text-2)' }}>{label}</span>
+      <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)' }}>{value}</span>
+    </div>
+  )
+}
+
+const sectionLabel: React.CSSProperties = {
+  fontSize: '0.72rem',
+  fontWeight: 700,
+  color: 'var(--muted)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+  marginBottom: '0.875rem',
+}
